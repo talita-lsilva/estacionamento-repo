@@ -4,6 +4,4 @@ Flask-WTF==1.0.0
 WTForms==3.0.1
 gunicorn
 pytz
-Flask
-Flask-SQLAlchemy
-psycopg2-binary
+werkzeug==2.3.8
