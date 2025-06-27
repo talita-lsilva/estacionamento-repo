@@ -1,12 +1,12 @@
 from flask import Blueprint, render_template, request, redirect, url_for
 from datetime import datetime, timedelta
+from .extensions import mongo  # importar mongo direto
 
-bp = Blueprint('main', __name__)
+main = Blueprint('main', __name__)
 
 # Criação do layout do estacionamento
 # None = espaço vazio (rua), 0 = vaga sem número, n = vaga com número
 layout = [
-    # Linha do topo (da esquerda para a direita)
     [38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 'N4', 'N3', 'N2', 'N1', None],
     [None]*28 + [14],
     [None]*28 + [13],
@@ -24,35 +24,18 @@ layout = [
     [None]*28 + [1],
 ]
 
-# Criação da lista de vagas (apenas para células que são vagas)
-vagas = []
-layout_indices = []
-for row in layout:
-    row_indices = []
-    for cell in row:
-        if cell is not None:
-            row_indices.append(len(vagas))
-            vagas.append({'numero': cell, 'ocupada': False, 'chassi': '', 'modelo': '', 'ocupada_em': None, 'ocupada_em_str': ''})
-        else:
-            row_indices.append(None)
-    layout_indices.append(row_indices)
-
-@bp.route('/', methods=['GET'])
+@main.route('/', methods=['GET'])
 def index():
+    vagas = list(mongo.db.vagas.find())
     agora = datetime.now()
     for vaga in vagas:
-        if vaga['ocupada'] and vaga['ocupada_em']:
+        if vaga.get('ocupada') and vaga.get('ocupada_em'):
             vaga['ocupada_em_str'] = vaga['ocupada_em'].isoformat()
-            # ALERTA: se ocupada há mais de 5 dias
-            if agora - vaga['ocupada_em'] > timedelta(days=5):
-                vaga['alerta'] = True
-            else:
-                vaga['alerta'] = False
+            vaga['alerta'] = (agora - vaga['ocupada_em'] > timedelta(days=5))
         else:
             vaga['ocupada_em_str'] = ''
             vaga['alerta'] = False
 
-    # Passa o layout para o template, mas com índices das vagas
     layout_indices = []
     idx = 0
     for row in layout:
@@ -64,9 +47,11 @@ def index():
             else:
                 row_indices.append(None)
         layout_indices.append(row_indices)
-    total_livres = sum(1 for vaga in vagas if not vaga['ocupada'])
-    total_ocupadas = sum(1 for vaga in vagas if vaga['ocupada'])
+
+    total_livres = sum(1 for vaga in vagas if not vaga.get('ocupada'))
+    total_ocupadas = sum(1 for vaga in vagas if vaga.get('ocupada'))
     total_alerta = sum(1 for vaga in vagas if vaga.get('alerta'))
+
     return render_template(
         'index.html',
         vagas=vagas,
@@ -78,25 +63,42 @@ def index():
         total_alerta=total_alerta
     )
 
-@bp.route('/ocupar', methods=['POST'])
+@main.route('/ocupar', methods=['POST'])
 def ocupar():
-    idx = int(request.form['idx'])
-    chassi = request.form['chassi']
-    modelo = request.form['modelo']
-    vaga = vagas[idx]
-    vaga['ocupada'] = True
-    vaga['chassi'] = chassi
-    vaga['modelo'] = modelo
-    vaga['ocupada_em'] = datetime.now()
+    try:
+        idx = int(request.form['idx'])
+        chassi = request.form['chassi']
+        modelo = request.form['modelo']
+        if not chassi or not modelo:
+            return "Chassi e modelo são obrigatórios", 400
+        agora = datetime.now()
+        mongo.db.vagas.update_one(
+            {"idx": idx},
+            {"$set": {
+                "ocupada": True,
+                "chassi": chassi,
+                "modelo": modelo,
+                "ocupada_em": agora
+            }},
+            upsert=True
+        )
+    except Exception as e:
+        return str(e), 500
     return redirect(url_for('main.index'))
 
-@bp.route('/liberar', methods=['POST'])
+@main.route('/liberar', methods=['POST'])
 def liberar():
-    idx = int(request.form['idx'])
-    vaga = vagas[idx]
-    vaga['ocupada'] = False
-    vaga['chassi'] = ''
-    vaga['modelo'] = ''
-    vaga['ocupada_em'] = None
+    try:
+        idx = int(request.form['idx'])
+        mongo.db.vagas.update_one(
+            {"idx": idx},
+            {"$set": {
+                "ocupada": False,
+                "chassi": "",
+                "modelo": "",
+                "ocupada_em": None
+            }}
+        )
+    except Exception as e:
+        return str(e), 500
     return redirect(url_for('main.index'))
-
