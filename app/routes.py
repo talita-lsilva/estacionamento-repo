@@ -32,14 +32,20 @@ def index():
     agora = datetime.now(fuso_br)
     for vaga in vagas:
         if vaga.get('ocupada') and vaga.get('ocupada_em'):
-            vaga['ocupada_em_str'] = vaga['ocupada_em'].isoformat()
-            vaga['alerta'] = (agora - vaga['ocupada_em'] > timedelta(days=5))
+            if vaga['ocupada_em'].tzinfo is None:
+                ocupada_em = vaga['ocupada_em'].replace(tzinfo=pytz.UTC).astimezone(fuso_br)
+            else:
+                ocupada_em = vaga['ocupada_em'].astimezone(fuso_br)
+
+            vaga['ocupada_em_str'] = ocupada_em.isoformat()
+            vaga['alerta'] = (agora - ocupada_em > timedelta(days=5))
         else:
             vaga['ocupada_em_str'] = ''
             vaga['alerta'] = False
 
     layout_indices = []
     idx = 0
+    
     for row in layout:
         row_indices = []
         for cell in row:
