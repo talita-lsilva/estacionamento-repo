@@ -5,3 +5,4 @@ WTForms==3.0.1
 gunicorn
 pytz
 werkzeug==2.3.8
+flask_pymongo==2.3.0
