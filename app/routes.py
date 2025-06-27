@@ -1,8 +1,10 @@
 from flask import Blueprint, render_template, request, redirect, url_for
 from datetime import datetime, timedelta
 from .extensions import mongo  # importar mongo direto
+import pytz
 
 main = Blueprint('main', __name__)
+fuso_br = pytz.timezone('America/Sao_Paulo')
 
 # Criação do layout do estacionamento
 # None = espaço vazio (rua), 0 = vaga sem número, n = vaga com número
@@ -27,7 +29,7 @@ layout = [
 @main.route('/', methods=['GET'])
 def index():
     vagas = list(mongo.db.vagas.find())
-    agora = datetime.now()
+    agora = datetime.now(fuso_br)
     for vaga in vagas:
         if vaga.get('ocupada') and vaga.get('ocupada_em'):
             vaga['ocupada_em_str'] = vaga['ocupada_em'].isoformat()
@@ -71,7 +73,7 @@ def ocupar():
         modelo = request.form['modelo']
         if not chassi or not modelo:
             return "Chassi e modelo são obrigatórios", 400
-        agora = datetime.now()
+        agora = datetime.now(fuso_br)
         mongo.db.vagas.update_one(
             {"idx": idx},
             {"$set": {
